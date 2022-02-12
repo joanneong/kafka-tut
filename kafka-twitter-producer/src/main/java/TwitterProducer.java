@@ -8,6 +8,7 @@ import com.twitter.hbc.core.endpoint.StatusesFilterEndpoint;
 import com.twitter.hbc.core.processor.StringDelimitedProcessor;
 import com.twitter.hbc.httpclient.auth.Authentication;
 import com.twitter.hbc.httpclient.auth.OAuth1;
+import io.github.cdimascio.dotenv.Dotenv;
 import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -26,10 +27,10 @@ import java.util.concurrent.TimeUnit;
 public class TwitterProducer {
     Logger logger = LoggerFactory.getLogger(TwitterProducer.class.getName());
 
-    private static final String consumerKey = "3A8GAYTosEQEEXGD8i5EStWaw";
-    private static final String consumerSecret = "lcD3tXviru5AxgfnwWABoOu1h7bKzm59QoCS8PEZAWIyPqDS8g";
-    private static final String token = "746728393-IIM2bgUDnTSoA0XjC4SF3ah4zA7T50gMTuHpOWqB";
-    private static final String secret = "RuSffDrZPKrsdE2Wr7RGKPNzNrLp01YTDxUuovmZOJ0Gg";
+    public static final String API_KEY = "API_KEY";
+    public static final String API_KEY_SECRET = "API_KEY_SECRET";
+    public static final String ACCESS_TOKEN = "ACCESS_TOKEN";
+    public static final String ACCESS_TOKEN_SECRET = "ACCESS_TOKEN_SECRET";
 
     private static final String BOOTSTRAP_SERVER = "localhost:9092";
 
@@ -101,21 +102,38 @@ public class TwitterProducer {
     }
 
     public Client createTwitterClient(BlockingQueue<String> msgQueue) {
+        Dotenv dotenv = Dotenv.configure()
+                .directory("./kafka-twitter-producer")
+                .ignoreIfMalformed()
+                .ignoreIfMissing()
+                .load();
+
+        String consumerKey = dotenv.get(API_KEY);
+        String consumerSecret = dotenv.get(API_KEY_SECRET);
+        String token = dotenv.get(ACCESS_TOKEN);
+        String secret = dotenv.get(ACCESS_TOKEN_SECRET);
+
         Hosts hosebirdHosts = new HttpHosts(Constants.STREAM_HOST);
         StatusesFilterEndpoint hosebirdEndpoint = new StatusesFilterEndpoint();
 
         hosebirdEndpoint.trackTerms(terms);
 
-        Authentication hosebirdAuth = new OAuth1(consumerKey, consumerSecret, token, secret);
+        Client hosebirdClient = null;
+        try {
+            Authentication hosebirdAuth = new OAuth1(consumerKey, consumerSecret, token, secret);
 
-        ClientBuilder clientBuilder = new ClientBuilder()
-                .name("My kafka-twitter client")
-                .hosts(hosebirdHosts)
-                .authentication(hosebirdAuth)
-                .endpoint(hosebirdEndpoint)
-                .processor(new StringDelimitedProcessor(msgQueue));
+            ClientBuilder clientBuilder = new ClientBuilder()
+                    .name("My kafka-twitter client")
+                    .hosts(hosebirdHosts)
+                    .authentication(hosebirdAuth)
+                    .endpoint(hosebirdEndpoint)
+                    .processor(new StringDelimitedProcessor(msgQueue));
 
-        Client hosebirdClient = clientBuilder.build();
+            hosebirdClient = clientBuilder.build();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
         return hosebirdClient;
     }
 
